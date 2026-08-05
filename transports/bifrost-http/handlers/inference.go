@@ -816,6 +816,30 @@ func (h *CompletionHandler) RegisterRoutes(r *router.Router, middlewares ...sche
 
 // listModels handles GET /v1/models - Process list models requests
 // If provider is not specified, lists all models from all configured providers
+func shouldReturnEmptyListModelsResponse(bifrostErr *schemas.BifrostError) bool {
+	if bifrostErr == nil || bifrostErr.Error == nil || bifrostErr.Error.Code == nil {
+		return false
+	}
+	return bifrostErr.ExtraFields.RequestType == schemas.ListModelsRequest && *bifrostErr.Error.Code == "unsupported_operation"
+}
+
+func buildDisabledListModelsResponse() *schemas.BifrostListModelsResponse {
+	return &schemas.BifrostListModelsResponse{
+		Data:    []schemas.Model{},
+		Message: "The model_list request is disabled for this provider.",
+	}
+}
+
+func shouldSkipListModelsRequest(provider string, customProviderConfig *schemas.CustomProviderConfig) bool {
+	if provider == "" {
+		return false
+	}
+	if customProviderConfig == nil || customProviderConfig.AllowedRequests == nil {
+		return false
+	}
+	return !customProviderConfig.IsOperationAllowed(schemas.ListModelsRequest)
+}
+
 func (h *CompletionHandler) listModels(ctx *fasthttp.RequestCtx) {
 	// Get provider from query parameters
 	provider := string(ctx.QueryArgs().Peek("provider"))
@@ -858,6 +882,18 @@ func (h *CompletionHandler) listModels(ctx *fasthttp.RequestCtx) {
 	}
 	if len(extraParams) > 0 {
 		bifrostListModelsReq.ExtraParams = extraParams
+	}
+
+	if provider != "" {
+		if providerConfig, err := h.config.GetProviderConfigRaw(schemas.ModelProvider(provider)); err == nil && providerConfig != nil {
+			if shouldSkipListModelsRequest(provider, providerConfig.CustomProviderConfig) {
+				if streamLargeResponseIfActive(ctx, bifrostCtx) {
+					return
+				}
+				SendJSON(ctx, buildDisabledListModelsResponse())
+				return
+			}
+		}
 	}
 
 	// If provider is empty, list all models from all providers
