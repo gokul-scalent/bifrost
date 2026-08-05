@@ -8290,18 +8290,6 @@ func (bifrost *Bifrost) getAllSupportedKeys(ctx *schemas.BifrostContext, provide
 		}
 	}
 
-	// config, err := bifrost.account.GetConfigForProvider(providerKey)
-	// 		if err != nil {
-	// 			bifrost.logger.Warn("failed to get config for provider %s while listing configured providers: %v", providerKey, err)
-	// 			continue
-	// 		}
-	// 		if config == nil {
-	// 			continue
-	// 		}
-	// 		if config.CustomProviderConfig != nil && config.CustomProviderConfig.AllowedRequests != nil && !config.CustomProviderConfig.IsOperationAllowed(schemas.ListModelsRequest) {
-	// 			continue
-	// 		}
-
 	keys, err := bifrost.account.GetKeysForProvider(ctx, providerKey)
 	if err != nil {
 		return nil, err
