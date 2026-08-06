@@ -831,12 +831,12 @@ func buildDisabledListModelsResponse() *schemas.BifrostListModelsResponse {
 }
 
 func shouldSkipListModelsRequest(provider string, customProviderConfig *schemas.CustomProviderConfig) bool {
-	if provider == "" {
+	if provider == "" ||
+		customProviderConfig == nil ||
+		customProviderConfig.AllowedRequests == nil {
 		return false
 	}
-	if customProviderConfig == nil || customProviderConfig.AllowedRequests == nil {
-		return false
-	}
+
 	return !customProviderConfig.IsOperationAllowed(schemas.ListModelsRequest)
 }
 
@@ -885,22 +885,21 @@ func (h *CompletionHandler) listModels(ctx *fasthttp.RequestCtx) {
 	}
 
 	if provider != "" {
-		if providerConfig, err := h.config.GetProviderConfigRaw(schemas.ModelProvider(provider)); err == nil && providerConfig != nil {
-			if shouldSkipListModelsRequest(provider, providerConfig.CustomProviderConfig) {
-				if streamLargeResponseIfActive(ctx, bifrostCtx) {
-					return
-				}
-				SendJSON(ctx, buildDisabledListModelsResponse())
+		if providerConfig, err := h.config.GetProviderConfigRaw(schemas.ModelProvider(provider)); err == nil &&
+			providerConfig != nil &&
+			shouldSkipListModelsRequest(provider, providerConfig.CustomProviderConfig) {
+
+			if streamLargeResponseIfActive(ctx, bifrostCtx) {
 				return
 			}
-		}
-	}
 
-	// If provider is empty, list all models from all providers
-	if provider == "" {
-		resp, bifrostErr = h.client.ListAllModels(bifrostCtx, bifrostListModelsReq)
-	} else {
+			SendJSON(ctx, buildDisabledListModelsResponse())
+			return
+		}
+
 		resp, bifrostErr = h.client.ListModelsRequest(bifrostCtx, bifrostListModelsReq)
+	} else {
+		resp, bifrostErr = h.client.ListAllModels(bifrostCtx, bifrostListModelsReq)
 	}
 
 	if bifrostErr != nil {
