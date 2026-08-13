@@ -927,6 +927,60 @@ func TestGetConfiguredProvidersRespectsListModelsAllowlist(t *testing.T) {
 	}
 }
 
+func TestListAllModelsExcludesProviderWithFailedPrepare(t *testing.T) {
+	account := NewMockAccount()
+	brokenProvider := schemas.ModelProvider("broken-provider")
+
+	account.mu.Lock()
+	account.configs[brokenProvider] = &schemas.ProviderConfig{
+		NetworkConfig: schemas.NetworkConfig{
+			DefaultRequestTimeoutInSeconds: 300,
+			MaxRetries:                     3,
+			RetryBackoffInitial:            500 * time.Millisecond,
+			RetryBackoffMax:                5 * time.Second,
+		},
+		ConcurrencyAndBufferSize: schemas.ConcurrencyAndBufferSize{
+			Concurrency: 1,
+			BufferSize:  1,
+		},
+		CustomProviderConfig: &schemas.CustomProviderConfig{
+			BaseProviderType: schemas.ModelProvider("unsupported-base-provider"),
+		},
+	}
+	account.keys[brokenProvider] = []schemas.Key{{
+		ID:     "broken-key",
+		Value:  *schemas.NewSecretVar("sk-broken"),
+		Weight: 100,
+	}}
+	account.mu.Unlock()
+
+	client, err := Init(context.Background(), schemas.BifrostConfig{
+		Account: account,
+		Logger:  NewDefaultLogger(schemas.LogLevelError),
+	})
+	if err != nil {
+		t.Fatalf("Error initializing Bifrost: %v", err)
+	}
+	defer client.Shutdown()
+
+	parentCtx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+
+	ctx := schemas.NewBifrostContext(parentCtx, schemas.NoDeadline)
+	ctx.SetValue(schemas.BifrostContextKeyAvailableProviders, []schemas.ModelProvider{brokenProvider})
+
+	resp, bifrostErr := client.ListAllModels(ctx, &schemas.BifrostListModelsRequest{})
+	if bifrostErr != nil {
+		t.Fatalf("expected failed-init provider to be excluded from ListAllModels, got error: %v", bifrostErr)
+	}
+	if resp == nil {
+		t.Fatalf("expected non-nil list models response")
+	}
+	if len(resp.Data) != 0 {
+		t.Fatalf("expected no models when only failed-init provider is available, got %d", len(resp.Data))
+	}
+}
+
 func TestRunStreamPreHooks_FinalChunkFlushesTrace(t *testing.T) {
 	ctx := schemas.NewBifrostContext(context.Background(), schemas.NoDeadline)
 	account := NewMockAccount()

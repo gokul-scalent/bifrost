@@ -3607,6 +3607,13 @@ func (bifrost *Bifrost) GetConfiguredProviders() ([]schemas.ModelProvider, error
 		return nil, err
 	}
 
+	initializedProviders := make(map[schemas.ModelProvider]struct{})
+	if providers := bifrost.providers.Load(); providers != nil {
+		for _, provider := range *providers {
+			initializedProviders[provider.GetProviderKey()] = struct{}{}
+		}
+	}
+
 	modelProviders := make([]schemas.ModelProvider, 0, len(providerKeys))
 	for _, providerKey := range providerKeys {
 		if strings.TrimSpace(string(providerKey)) == "" {
@@ -3622,6 +3629,9 @@ func (bifrost *Bifrost) GetConfiguredProviders() ([]schemas.ModelProvider, error
 			continue
 		}
 		if config.CustomProviderConfig != nil && config.CustomProviderConfig.AllowedRequests != nil && !config.CustomProviderConfig.IsOperationAllowed(schemas.ListModelsRequest) {
+			continue
+		}
+		if _, initialized := initializedProviders[providerKey]; !initialized {
 			continue
 		}
 		modelProviders = append(modelProviders, providerKey)
