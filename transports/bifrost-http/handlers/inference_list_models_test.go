@@ -101,5 +101,6 @@ func TestBuildDisabledListModelsResponse(t *testing.T) {
 	resp := buildDisabledListModelsResponse()
 
 	assert.Equal(t, "The model_list request is disabled for this provider.", resp.Message)
+	assert.NotNil(t, resp.Data)
 	assert.Empty(t, resp.Data)
 }
